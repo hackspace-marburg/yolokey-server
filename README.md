@@ -2,7 +2,7 @@
 Automatic deployment of fastd public keys. Accept everyone's keys!
 
 ## Set up
-    sudo apt-get install python3-pip python3-virtualenv
+    sudo apt-get install python3-pip python3-virtualenv python3-dev
     git clone https://github.com/hackspace-marburg/yolokey-server.git
     cd yolokey-server/
     ./bootstrap.sh

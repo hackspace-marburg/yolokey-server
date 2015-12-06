@@ -134,4 +134,4 @@ def deploy():
 
     return 'Yay. Thx Travis!'
 
-run(host='::', port=8080, reloader=False)
+run(server='meinheld', host='::1', port=8081, reloader=True)
