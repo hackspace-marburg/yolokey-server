@@ -18,9 +18,13 @@
 #    misrepresented as being the original software.
 # 3. This notice may not be removed or altered from any source distribution.
 
+import os
 import re
-from bottle import route, run, template, abort
-
+import subprocess
+import json
+import uuid
+from bottle import route, run, abort, request
+from hashlib import sha256
 
 hostname_regex = re.compile(r'35\d{3}-[\w-]{1,}', re.IGNORECASE)  # 35xxx-xxxxx_Xxxxx
 
@@ -32,19 +36,69 @@ def validate_key_format(key):
         b = bytes.fromhex(key)
     except ValueError:
         return False
-
     if len(b) != 32:
         return False
-
     return True
 
-@route('/add_key/<hostname>/<key>')
-def add_key(hostname, key):
+def find_key(key, fastd_peers_dir='/etc/fastd/site/peers'):
+    for peer in os.listdir(fastd_peers_dir):
+        if os.path.isdir(peer):
+            continue
+        for line in open(os.path.join(fastd_peers_dir, peer), 'r'):
+            if key in line:
+                yield peer
+
+@route('/add/<hostname>/<key>')
+def add(hostname, key):
     if not validate_hostname(hostname):
         abort(400, 'Error: Hostname invalid')
     elif not validate_key_format(key):
         abort(400, 'Error: Key format invalid')
 
-    return template('{{hostname}}, {{key}}', hostname=hostname, key=key)
+    existing_keys = list(
+        find_key(key, fastd_peers_dir=os.environ['FASTD_PEERS_DIR'])
+    )
+    if len(existing_keys) == 1:
+        if existing_keys[0] == hostname:
+            abort(409, 'Warning: The same key does already exist for {hostname}'.format(
+                    hostname=hostname
+                )
+            )
+        else:
+            abort(409, 'Error: Key is linked to another hostname.')
+    elif len(existing_keys) >= 2:
+        abort(409, 'Error: WAT? Key is linked to more than one hostname: {peers}'.format(
+                peers=', '.join(existing_keys)
+            )
+        )
 
-run(host='localhost', port=8080, reloader=True)
+    if os.path.isfile(os.path.join(os.environ['FASTD_PEERS_DIR'], hostname)):
+        hostname = '{hostname}__{rand}'.format(
+            hostname=hostname,
+            rand=uuid.uuid4().hex[:8]
+        )
+
+    with open(os.path.join(os.environ['FASTD_PEERS_DIR'], hostname), 'w') as config:
+        content = 'key "{key}";'.format(key=key)
+        config.write(content)
+        config.close()
+        if subprocess.check_call(
+            ['git', '-C', os.environ['FASTD_PEERS_DIR'], 'pull']
+        ):
+            abort(500, 'Error: git pull failed')
+        if subprocess.check_call(
+            ['git', '-C', os.environ['FASTD_PEERS_DIR'], 'add', hostname]
+        ):
+            abort(500, 'Error: git add failed')
+        if subprocess.check_call(
+            ['git', '-C', os.environ['FASTD_PEERS_DIR'], 'commit', '-m', 'Added {hostname}'.format(hostname=hostname)]
+        ):
+            abort(500, 'Error: git commit failed')
+        if subprocess.check_call(
+            ['git', '-C', os.environ['FASTD_PEERS_DIR'], 'push']
+        ):
+            abort(500, 'Error: git push failed')
+
+    return 'Info: Added {key} for {hostname}'.format(hostname=hostname, key=key)
+
+run(host='::', port=8080, reloader=False)
