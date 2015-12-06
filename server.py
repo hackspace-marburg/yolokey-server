@@ -23,7 +23,7 @@ import re
 import subprocess
 import json
 import uuid
-from bottle import route, run, abort, request
+from bottle import route, post, run, abort, request
 from hashlib import sha256
 
 hostname_regex = re.compile(r'35\d{3}-[\w-]{1,}', re.IGNORECASE)  # 35xxx-xxxxx_Xxxxx
@@ -48,12 +48,20 @@ def find_key(key, fastd_peers_dir='/etc/fastd/site/peers'):
             if key in line:
                 yield peer
 
+def verify_signed_challenge(hostname, signed_challenge,
+                            fastd_peers_dir='/etc/fastd/site/peers'):
+    for line in open(os.path.join(fastd_peers_dir, hostname), 'r'):
+
+
 @route('/add/<hostname>/<key>')
-def add(hostname, key):
+@route('/rename/<hostname>/<key>/<signed_challenge>')
+def save(hostname, key, signed_challenge=''):
     if not validate_hostname(hostname):
         abort(400, 'Error: Hostname invalid')
     elif not validate_key_format(key):
         abort(400, 'Error: Key format invalid')
+
+    hostname_old = ''
 
     existing_keys = list(
         find_key(key, fastd_peers_dir=os.environ['FASTD_PEERS_DIR'])
@@ -64,8 +72,11 @@ def add(hostname, key):
                     hostname=hostname
                 )
             )
+        elif verify_signed_challenge(existing_keys[0], signed_challenge,
+                                     fastd_peers_dir=os.environ['FASTD_PEERS_DIR']):
+            hostname_old = existing_keys[0]
         else:
-            abort(409, 'Error: Key is linked to another hostname.')
+            abort(409, 'Error: Key is linked to another hostname. Sign the challenge.')
     elif len(existing_keys) >= 2:
         abort(409, 'Error: WAT? Key is linked to more than one hostname: {peers}'.format(
                 peers=', '.join(existing_keys)
@@ -79,26 +90,71 @@ def add(hostname, key):
         )
 
     with open(os.path.join(os.environ['FASTD_PEERS_DIR'], hostname), 'w') as config:
-        content = 'key "{key}";'.format(key=key)
+        content = '''\
+# Challenge: {challenge}
+key "{key}";
+'''.format(key=key)
         config.write(content)
         config.close()
-        if subprocess.check_call(
-            ['git', '-C', os.environ['FASTD_PEERS_DIR'], 'pull']
-        ):
-            abort(500, 'Error: git pull failed')
-        if subprocess.check_call(
-            ['git', '-C', os.environ['FASTD_PEERS_DIR'], 'add', hostname]
-        ):
-            abort(500, 'Error: git add failed')
-        if subprocess.check_call(
-            ['git', '-C', os.environ['FASTD_PEERS_DIR'], 'commit', '-m', 'Added {hostname}'.format(hostname=hostname)]
-        ):
-            abort(500, 'Error: git commit failed')
-        if subprocess.check_call(
-            ['git', '-C', os.environ['FASTD_PEERS_DIR'], 'push']
-        ):
-            abort(500, 'Error: git push failed')
+
+        commands = [
+            ['git', '-C', os.environ['FASTD_PEERS_DIR'], 'pull'],
+            ['git', '-C', os.environ['FASTD_PEERS_DIR'], 'checkout', 'master'],
+            ['git', '-C', os.environ['FASTD_PEERS_DIR'], 'add', hostname],
+            [
+                'git', '-C', os.environ['FASTD_PEERS_DIR'], 'commit', '-m',
+                '{action} {hostname}'.format(
+                    action='Changed {hostname_old} to'.format(hostname_old=hostname_old)
+                            if hostname_old != ''
+                            else 'Added',
+                    hostname=hostname
+                )
+            ],
+            ['git', '-C', os.environ['FASTD_PEERS_DIR'], 'push'],
+            ['git', '-C', os.environ['FASTD_PEERS_DIR'], 'checkout', 'deploy']
+        ]
+        for command in commands:
+            if subprocess.check_call(command):
+                abort(500, 'Error: {cmd} failed'.format(
+                        cmd=' '.join(cmd)
+                    )
+                )
 
     return 'Info: Added {key} for {hostname}'.format(hostname=hostname, key=key)
+
+#@route('/rename/<hostname>/<key>/<response>')
+#def rename(hostname, key, response):
+
+
+@post('/deploy')
+def deploy():
+    if request.get_header('Authorization') != sha256(
+        os.environ['TRAVIS_REPO_SLUG'].encode('utf-8') +
+        os.environ['TRAVIS_TOKEN'].encode('utf-8')
+    ).hexdigest():
+        abort(401, 'Error: Authorization header invalid')
+    
+    payload = json.loads(request.forms.get('payload'))
+    if payload['state'] != 'passed':
+        return 'Okay. ;_;'
+
+    commands = [
+        ['git', '-C', os.environ['FASTD_PEERS_DIR'], 'pull'],
+        ['git', '-C', os.environ['FASTD_PEERS_DIR'], 'checkout', 'deploy'],
+        ['git', '-C', os.environ['FASTD_PEERS_DIR'], 'merge', 'master'],
+        ['git', '-C', os.environ['FASTD_PEERS_DIR'], 'push'],
+        [
+            'sudo', 'systemctl', 'reload', 
+            'fastd@{site}.service'.format(os.environ['FASTD_SITE'])
+        ]
+    ]
+    for command in commands:
+        if subprocess.check_call(command):
+            abort(500, 'Error: {cmd} failed'.format(
+                    cmd=' '.join(cmd)
+                )
+            )
+
+    return 'Yay. Thx Travis!'
 
 run(host='::', port=8080, reloader=False)
