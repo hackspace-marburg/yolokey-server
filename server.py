@@ -48,20 +48,12 @@ def find_key(key, fastd_peers_dir='/etc/fastd/site/peers'):
             if key in line:
                 yield peer
 
-def verify_signed_challenge(hostname, signed_challenge,
-                            fastd_peers_dir='/etc/fastd/site/peers'):
-    for line in open(os.path.join(fastd_peers_dir, hostname), 'r'):
-
-
 @route('/add/<hostname>/<key>')
-@route('/rename/<hostname>/<key>/<signed_challenge>')
-def save(hostname, key, signed_challenge=''):
+def add(hostname, key):
     if not validate_hostname(hostname):
         abort(400, 'Error: Hostname invalid')
     elif not validate_key_format(key):
         abort(400, 'Error: Key format invalid')
-
-    hostname_old = ''
 
     existing_keys = list(
         find_key(key, fastd_peers_dir=os.environ['FASTD_PEERS_DIR'])
@@ -72,11 +64,8 @@ def save(hostname, key, signed_challenge=''):
                     hostname=hostname
                 )
             )
-        elif verify_signed_challenge(existing_keys[0], signed_challenge,
-                                     fastd_peers_dir=os.environ['FASTD_PEERS_DIR']):
-            hostname_old = existing_keys[0]
         else:
-            abort(409, 'Error: Key is linked to another hostname. Sign the challenge.')
+            abort(409, 'Error: Key is linked to another hostname.')  # add method to change hostname
     elif len(existing_keys) >= 2:
         abort(409, 'Error: WAT? Key is linked to more than one hostname: {peers}'.format(
                 peers=', '.join(existing_keys)
@@ -90,10 +79,7 @@ def save(hostname, key, signed_challenge=''):
         )
 
     with open(os.path.join(os.environ['FASTD_PEERS_DIR'], hostname), 'w') as config:
-        content = '''\
-# Challenge: {challenge}
-key "{key}";
-'''.format(key=key)
+        content = 'key "{key}";'.format(key=key)
         config.write(content)
         config.close()
 
@@ -103,12 +89,7 @@ key "{key}";
             ['git', '-C', os.environ['FASTD_PEERS_DIR'], 'add', hostname],
             [
                 'git', '-C', os.environ['FASTD_PEERS_DIR'], 'commit', '-m',
-                '{action} {hostname}'.format(
-                    action='Changed {hostname_old} to'.format(hostname_old=hostname_old)
-                            if hostname_old != ''
-                            else 'Added',
-                    hostname=hostname
-                )
+                'Added {hostname}'.format(hostname=hostname)
             ],
             ['git', '-C', os.environ['FASTD_PEERS_DIR'], 'push'],
             ['git', '-C', os.environ['FASTD_PEERS_DIR'], 'checkout', 'deploy']
@@ -121,10 +102,6 @@ key "{key}";
                 )
 
     return 'Info: Added {key} for {hostname}'.format(hostname=hostname, key=key)
-
-#@route('/rename/<hostname>/<key>/<response>')
-#def rename(hostname, key, response):
-
 
 @post('/deploy')
 def deploy():
