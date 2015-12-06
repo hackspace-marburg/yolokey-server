@@ -96,8 +96,8 @@ def add(hostname, key):
         ]
         for command in commands:
             if subprocess.check_call(command):
-                abort(500, 'Error: {cmd} failed'.format(
-                        cmd=' '.join(cmd)
+                abort(500, 'Error: {command} failed'.format(
+                        command=' '.join(command)
                     )
                 )
 
@@ -127,8 +127,8 @@ def deploy():
     ]
     for command in commands:
         if subprocess.check_call(command):
-            abort(500, 'Error: {cmd} failed'.format(
-                    cmd=' '.join(cmd)
+            abort(500, 'Error: {command} failed'.format(
+                    command=' '.join(command)
                 )
             )
 
