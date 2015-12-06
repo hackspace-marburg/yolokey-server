@@ -122,7 +122,7 @@ def deploy():
         ['git', '-C', os.environ['FASTD_PEERS_DIR'], 'push'],
         [
             'sudo', 'systemctl', 'reload', 
-            'fastd@{site}.service'.format(os.environ['FASTD_SITE'])
+            'fastd@{site}.service'.format(site=os.environ['FASTD_SITE'])
         ]
     ]
     for command in commands:
