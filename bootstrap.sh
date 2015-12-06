@@ -3,7 +3,7 @@
 virtualenv -p /usr/bin/python3 venv
 
 if [ "$?" -eq 0 ]; then
-    source venv/bin/activate
+    . venv/bin/activate
     pip install -r requirements.txt
     python3 server.py
 else
