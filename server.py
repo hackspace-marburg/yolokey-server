@@ -79,7 +79,7 @@ def add(hostname, key):
         )
 
     with open(os.path.join(os.environ['FASTD_PEERS_DIR'], hostname), 'w') as config:
-        content = 'key "{key}";'.format(key=key)
+        content = 'key "{key}";\n'.format(key=key)
         config.write(content)
         config.close()
 
