@@ -105,8 +105,8 @@ def add(hostname, key):
         config.close()
 
         commands = [
-            ['git', '-C', os.environ['FASTD_PEERS_DIR'], 'checkout', 'master'],
             ['git', '-C', os.environ['FASTD_PEERS_DIR'], 'pull'],
+            ['git', '-C', os.environ['FASTD_PEERS_DIR'], 'checkout', 'master'],
             ['git', '-C', os.environ['FASTD_PEERS_DIR'], 'add', hostname],
             [
                 'git', '-C', os.environ['FASTD_PEERS_DIR'], 'commit', '-m',
@@ -137,8 +137,8 @@ def deploy():
         return 'Okay. ;_;'
 
     commands = [
-        ['git', '-C', os.environ['FASTD_PEERS_DIR'], 'checkout', 'deploy'],
         ['git', '-C', os.environ['FASTD_PEERS_DIR'], 'pull'],
+        ['git', '-C', os.environ['FASTD_PEERS_DIR'], 'checkout', 'deploy'],
         ['git', '-C', os.environ['FASTD_PEERS_DIR'], 'merge', 'master'],
         ['git', '-C', os.environ['FASTD_PEERS_DIR'], 'push'],
         [
