@@ -41,12 +41,33 @@ def validate_key_format(key):
     return True
 
 def find_key(key, fastd_peers_dir='/etc/fastd/site/peers'):
+    commands = [
+        ['git', '-C', fastd_peers_dir, 'pull'],
+        ['git', '-C', fastd_peers_dir, 'checkout', 'master']
+    ]
+    for command in commands:
+        if subprocess.check_call(command):
+            abort(500, 'Error: {command} failed'.format(
+                    command=' '.join(command)
+                )
+            )
+
     for peer in os.listdir(fastd_peers_dir):
         if os.path.isdir(peer):
             continue
         for line in open(os.path.join(fastd_peers_dir, peer), 'r'):
             if key in line:
                 yield peer
+
+    commands = [
+        ['git', '-C', fastd_peers_dir, 'checkout', 'deploy']
+    ]
+    for command in commands:
+        if subprocess.check_call(command):
+            abort(500, 'Error: {command} failed'.format(
+                    command=' '.join(command)
+                )
+            )
 
 @route('/add/<hostname>/<key>')
 def add(hostname, key):
