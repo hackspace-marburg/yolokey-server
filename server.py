@@ -40,34 +40,25 @@ def validate_key_format(key):
         return False
     return True
 
-def find_key(key, fastd_peers_dir='/etc/fastd/site/peers'):
-    commands = [
-        ['git', '-C', fastd_peers_dir, 'pull'],
-        ['git', '-C', fastd_peers_dir, 'checkout', 'master']
-    ]
-    for command in commands:
-        if subprocess.check_call(command):
-            abort(500, 'Error: {command} failed'.format(
-                    command=' '.join(command)
-                )
+def git(command):
+    if subprocess.check_call(['git', '-C', os.environ['FASTD_PEERS_DIR']] + command):
+        abort(500, 'Error: {command} failed'.format(
+                command=' '.join(command)
             )
+        )
 
-    for peer in os.listdir(fastd_peers_dir):
+def find_key(key):
+    git(['checkout', 'master'])
+    git(['pull'])
+
+    for peer in os.listdir(os.environ['FASTD_PEERS_DIR']):
         if os.path.isdir(peer):
             continue
-        for line in open(os.path.join(fastd_peers_dir, peer), 'r'):
+        for line in open(os.path.join(os.environ['FASTD_PEERS_DIR'], peer), 'r'):
             if key in line:
                 yield peer
 
-    commands = [
-        ['git', '-C', fastd_peers_dir, 'checkout', 'deploy']
-    ]
-    for command in commands:
-        if subprocess.check_call(command):
-            abort(500, 'Error: {command} failed'.format(
-                    command=' '.join(command)
-                )
-            )
+    git(['checkout', 'deploy'])
 
 @route('/add/<hostname>/<key>')
 def add(hostname, key):
@@ -77,7 +68,7 @@ def add(hostname, key):
         abort(400, 'Error: Key format invalid')
 
     existing_keys = list(
-        find_key(key, fastd_peers_dir=os.environ['FASTD_PEERS_DIR'])
+        find_key(key)
     )
     if len(existing_keys) == 1:
         if existing_keys[0] == hostname:
@@ -104,23 +95,17 @@ def add(hostname, key):
         config.write(content)
         config.close()
 
-        commands = [
-            ['git', '-C', os.environ['FASTD_PEERS_DIR'], 'pull'],
-            ['git', '-C', os.environ['FASTD_PEERS_DIR'], 'checkout', 'master'],
-            ['git', '-C', os.environ['FASTD_PEERS_DIR'], 'add', hostname],
+        git(['checkout', 'master'])
+        git(['pull'])
+        git(['add', hostname])
+        git(
             [
-                'git', '-C', os.environ['FASTD_PEERS_DIR'], 'commit', '-m',
+                'commit', '-m',
                 'Added {hostname}'.format(hostname=hostname)
-            ],
-            ['git', '-C', os.environ['FASTD_PEERS_DIR'], 'push'],
-            ['git', '-C', os.environ['FASTD_PEERS_DIR'], 'checkout', 'deploy']
-        ]
-        for command in commands:
-            if subprocess.check_call(command):
-                abort(500, 'Error: {command} failed'.format(
-                        command=' '.join(command)
-                    )
-                )
+            ]
+        )
+        git(['push'])
+        git(['checkout', 'deploy'])
 
     return 'Info: Added {key} for {hostname}'.format(hostname=hostname, key=key)
 
@@ -136,18 +121,18 @@ def deploy():
     if payload['state'] != 'passed':
         return 'Okay. ;_;'
 
-    commands = [
-        ['git', '-C', os.environ['FASTD_PEERS_DIR'], 'pull'],
-        ['git', '-C', os.environ['FASTD_PEERS_DIR'], 'checkout', 'deploy'],
-        ['git', '-C', os.environ['FASTD_PEERS_DIR'], 'merge', 'master'],
-        ['git', '-C', os.environ['FASTD_PEERS_DIR'], 'push'],
-        [
-            'sudo', 'systemctl', 'reload', 
-            'fastd@{site}.service'.format(site=os.environ['FASTD_SITE'])
-        ]
+    git(['checkout', 'master'])
+    git(['pull'])
+    git(['checkout', 'deploy'])
+    git(['pull'])
+    git(['merge', 'master'])
+    git(['push'])
+
+    fastd_reload_command = [
+        'sudo', 'systemctl', 'reload', 
+        'fastd@{site}.service'.format(site=os.environ['FASTD_SITE'])
     ]
-    for command in commands:
-        if subprocess.check_call(command):
+    if subprocess.check_call(fastd_reload_command):
             abort(500, 'Error: {command} failed'.format(
                     command=' '.join(command)
                 )
