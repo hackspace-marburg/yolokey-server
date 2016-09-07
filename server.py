@@ -23,13 +23,19 @@ import re
 import subprocess
 import json
 import uuid
+import requests
+import base64
 from bottle import route, post, run, abort, request
-from hashlib import sha256
+from requests.compat import urljoin
+from Crypto.PublicKey import RSA
+from Crypto.Hash import SHA
+from Crypto.Signature import PKCS1_v1_5
 
-hostname_regex = re.compile(r'35\d{3}-[\w-]{1,}', re.IGNORECASE)  # 35xxx-xxxxx_Xxxxx
+HOSTNAME_REGEX = re.compile(r'35\d{3}-[\w-]{1,}', re.IGNORECASE)  # 35xxx-xxxxx_Xxxxx
+TRAVIS_API_HOST = 'https://api.travis-ci.org'
 
 def validate_hostname(hostname):
-    return bool(hostname_regex.match(hostname))
+    return bool(HOSTNAME_REGEX.match(hostname))
 
 def validate_key_format(key):
     try:
@@ -59,6 +65,10 @@ def find_key(key):
                 yield peer
 
     git(['checkout', 'deploy'])
+
+def get_travis_public_key():
+    r = requests.get(urljoin(TRAVIS_API_HOST, '/config'))
+    return r.json()['config']['notifications']['webhook']['public_key']
 
 @route('/add/<hostname>/<key>')
 def add(hostname, key):
@@ -111,14 +121,16 @@ def add(hostname, key):
 
 @post('/deploy')
 def deploy():
-    if request.get_header('Authorization') != sha256(
-        os.environ['TRAVIS_REPO_SLUG'].encode('utf-8') +
-        os.environ['TRAVIS_TOKEN'].encode('utf-8')
-    ).hexdigest():
-        abort(401, 'Error: Authorization header invalid')
-    
-    payload = json.loads(request.forms.get('payload'))
-    if payload['state'] != 'passed':
+    payload = request.forms.get('payload')
+
+    key = RSA.importKey(get_travis_public_key())
+    if not PKCS1_v1_5.new(key).verify(
+        SHA.new(payload.encode('utf-8')),
+        base64.b64decode(request.get_header('Signature'))
+    ):
+        abort(401, 'Error: Signature verification invalid')
+
+    if json.loads(payload)['state'] != 'passed':
         return 'Okay. ;_;'
 
     git(['checkout', 'master'])
