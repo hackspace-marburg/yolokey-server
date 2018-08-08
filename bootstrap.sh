@@ -1,6 +1,6 @@
 #!/usr/bin/env sh
 
-virtualenv -p /usr/bin/python3 venv
+virtualenv -p $(which python3) venv
 
 if [ "$?" -eq 0 ]; then
     . venv/bin/activate
