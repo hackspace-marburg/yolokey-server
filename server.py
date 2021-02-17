@@ -20,30 +20,23 @@
 # 3. This notice may not be removed or altered from any source distribution.
 
 
-import base64
-import json
 import os
 import re
 import subprocess
 import uuid
 
-import requests
-from bottle import abort, post, request, route, run
-from Crypto.Hash import SHA
-from Crypto.PublicKey import RSA
-from Crypto.Signature import PKCS1_v1_5
-from requests.compat import urljoin
+from bottle import abort, request, route, run
 
 
 # Regular expression for hostnames to match, 35xxx-xxxxx_Xxxxx.
 HOSTNAME_REGEX = re.compile(r"35\d{3}-[\w-]{1,}", re.IGNORECASE)
 
-# URL of the Travis API.
-TRAVIS_API_HOST = "https://api.travis-ci.org"
-
 # The fastd site / interface and the peer directory.
 FASTD_SITE = os.environ["FASTD_SITE"]
 FASTD_PEERS_DIR = os.environ["FASTD_PEERS_DIR"]
+
+# A shared secret which the CI uses to authenticate itself.
+DEPLOYMENT_SECRET = os.environ["DEPLOYMENT_SECRET"]
 
 
 def validate_hostname(hostname):
@@ -81,12 +74,6 @@ def find_key(key):
                 yield peer
 
     git(["checkout", "deploy"])
-
-
-def get_travis_public_key():
-    """Return Travis CI's public key to verify requests."""
-    r = requests.get(urljoin(TRAVIS_API_HOST, "/config"))
-    return r.json()["config"]["notifications"]["webhook"]["public_key"]
 
 
 @route("/add/<hostname>/<key>")
@@ -145,7 +132,7 @@ def add(hostname, key):
     return "Info: Added {key} for {hostname}".format(hostname=hostname, key=key)
 
 
-@post("/deploy")
+@route("/deploy")
 def deploy():
     """Deploy changes from the master branch into the productive deploy branch.
 
@@ -155,17 +142,8 @@ def deploy():
     branch which will be used on the gateway. After merging, the fastd service
     will be restarted.
     """
-    payload = request.forms.get("payload")
-
-    key = RSA.importKey(get_travis_public_key())
-    if not PKCS1_v1_5.new(key).verify(
-        SHA.new(payload.encode("utf-8")),
-        base64.b64decode(request.get_header("Signature")),
-    ):
-        abort(401, "Error: Signature verification invalid")
-
-    if json.loads(payload)["state"] != "passed":
-        return "Okay. ;_;"
+    if request.get_header("Secret") != DEPLOYMENT_SECRET:
+        abort(400, "Error: Secret is either missing or incorrect")
 
     git(["checkout", "master"])
     git(["pull"])
@@ -186,8 +164,8 @@ def deploy():
             "Error: {command} failed".format(command=" ".join(fastd_reload_command)),
         )
 
-    return "Yay. Thx Travis!"
+    return "Yay. Thx CI!"
 
 
 if __name__ == "__main__":
-    run(server="meinheld", host="::1", port=8081, reloader=True)
+    run(server="meinheld", host="::1", port=8081)
