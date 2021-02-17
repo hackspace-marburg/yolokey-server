@@ -67,9 +67,11 @@ def find_key(key):
     git(["pull"])
 
     for peer in os.listdir(FASTD_PEERS_DIR):
-        if os.path.isdir(peer):
+        peer_file = os.path.join(FASTD_PEERS_DIR, peer)
+        if not os.path.isfile(peer_file):
             continue
-        for line in open(os.path.join(FASTD_PEERS_DIR, peer), "r"):
+
+        for line in open(peer_file, "r"):
             if key in line:
                 yield peer
 
