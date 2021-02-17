@@ -1,7 +1,5 @@
 #!/usr/bin/env sh
 
-set -euE
-
 virtualenv -p $(which python3) venv
 
 if [ "$?" -eq 0 ]; then
