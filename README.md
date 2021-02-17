@@ -10,5 +10,3 @@ Automatic deployment of fastd public keys. Accept everyone's keys!
 ## Environment variables
 * `FASTD_SITE`: fastd site / interface (`systemctl reload fastd@….service`)
 * `FASTD_PEERS_DIR`: fastd peer directory (`include peers from "…";`)
-* `TRAVIS_REPO_SLUG`: slug of your github repository (`username/repo`)
-* `TRAVIS_TOKEN`: Travis-CI webhook token

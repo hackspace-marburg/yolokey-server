@@ -1,4 +1,4 @@
-bottle==0.12.9
-meinheld==0.5.8
-requests==2.11.1
-pycryptodome==3.6.4
+bottle==0.12.19
+meinheld==1.0.2
+requests==2.25.1
+pycryptodome==3.10.1
