@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 # Copyright (C) 2015, 2016 Oleander Reis <oleander@oleander.cc>
-# Copyright (C) 2021 Alvar Penning <post@0x21.biz>
+# Copyright (C) 2021, 2024 Alvar Penning <post@0x21.biz>
 #
 # This software is provided 'as-is', without any express or implied
 # warranty.  In no event will the authors be held liable for any damages
@@ -76,6 +76,12 @@ def find_key(key):
                 yield peer
 
     git(["checkout", "deploy"])
+
+
+@route("/")
+def landing_page():
+    """Return an HTTP OK for the main page to be used in monitoring."""
+    return "I'm Still Standing."
 
 
 @route("/add/<hostname>/<key>")
